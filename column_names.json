@@ -1,0 +1,23 @@
+{
+    "MSPT Sociodemographics": [
+        ["encounter_date", "encdate"],
+        ["race", "race_org"],
+        ["ethnicity", "ethnic"],
+        ["age_at_first_symptom", "agesymp"],
+        ["age_at_diagnosis", "agediag"]
+    ],
+    "MSPT Patientcharacteristics": [
+        ["encounter_date", "encdate"],
+        ["insurance", "insuranc"],
+        ["current_living_situation", "living"],
+        ["employment_status", "employ"],
+        ["mstype", "MS_Type"],
+        ["years_of_education", "educ"],
+        ["pdds_cat", "pdds" ],
+        ["pdds_scr", "pdds.score"],
+        ["walking_aid", "wkaid"],
+        ["walking_aid_one_hand", "wkaid_hd"]
+
+    ]
+
+}
