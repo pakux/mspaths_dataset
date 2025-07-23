@@ -18,6 +18,22 @@
         ["walking_aid", "wkaid"],
         ["walking_aid_one_hand", "wkaid_hd"]
 
+    ],
+    "EMR Sociodemographics": [
+        ["effective_date", "effdate"],
+        ["sex", "sex_emr"],
+        ["race", "race_emr"],
+        ["ethnicity", "ethnic_emr"]
+    ],
+    "EMR Comorbidities": [],
+    "EMR Immunization": [],
+    "EMR Medications": [
+        ["med_strt", "effective_date_from_time"],
+        ["med_end", "effective_date_to_time"],
+        ["med_code", "medication_code"],
+        ["med_name", "medication_name"],
+        ["med_dose", "dose_quantity"],
+        ["med_unit", "dose_quantity_units"]
     ]
 
 }
