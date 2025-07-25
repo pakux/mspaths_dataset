@@ -162,38 +162,60 @@ def cleanup_sessions(bidsroot):
             sessions = [basename(s).replace('ses-','') for s in glob(join(subject, 'ses-*'))]
             sessions.sort(reverse=False)
 
+            sessions_df = pd.DataFrame()
+
             for s in range(len(sessions)):
+
+                try:
+                    ses_date = datetime.datetime.strptime (sessions[s], "%Y%m%d").strftime("%Y-%m-%d")
+                except ValueError:
+                    log.warning(f'session ses-{sessions[s]} is not a valid date - assuming it was already converted')
+                    continue
+                sessions_df = pd.concat((sessions_df, pd.DataFrame({'session_id': [f'ses-{s+1:03}'], 'acq_time': [ses_date]})), ignore_index=True)
                 log.debug(f'renaming ses-{sessions[s]} to ses-{s+1:03}')
+
                 rename(join(subject, f'ses-{sessions[s]}'), join(subject, f'ses-{s+1:03}'))
 
                 files = glob(join(subject, f'ses-{s+1:03}', '*', f'sub*ses-{sessions[s]}*'))
                 for f in files:
                     rename(f, f.replace(f'ses-{sessions[s]}', f'ses-{s+1:03}'))
 
+            # Write the sessions_tsv
+            sessions_tsv = join(subject, f'sub-{subject_id}_sessions.tsv')
+            if os.path.exists(sessions_tsv:
+                sessions_df.to_csv(sessions_tsv, sep='\t', index=False, mode='a')
+            else:
+                sessions_df.to_csv(sessions_tsv, sep='\t', index=False)
+
             progress.update(renaming_task, advance=1)
-
-
-            
-
 
 def main():
     import argparse
 
     parser = argparse.ArgumentParser(description='convert MSPATHS Data to BIDS')
+    subparsers = parser.add_subparsers(dest = 'command')
+
     parser.add_argument('source')
     parser.add_argument('target', default='.', help='target BIDS-Root')
     parser.add_argument('--debug', '-d', default='ERROR', help='debug-level')
     parser.add_argument('--zipfile', '-z', action='store_true', default=False, help='source is a single bundle zipfile')
 
+    
+    # Subcommand for cleanup_sessions
+    cleanup_parser = subparsers.add_parser('cleanup', help='Clean up sessions')
+    cleanup_parser.add_argument('target', help='Target BIDS-Root for cleanup')
+
+
     args = parser.parse_args()
 
     log.setLevel(args.debug)
-    print(args.zipfile)
-    if args.zipfile:
+
+    if args.command == 'cleanup':
+        cleanup_sessions(args.target)
+    elif args.zipfile:
         extract_single_zipbundle(args.source, args.target)
     else:
         extract_mri_files(args.source, args.target)
-#    cleanup_sessions(args.target)
 
 
 
