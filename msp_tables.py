@@ -155,13 +155,25 @@ def prepare_tables(mspaths_dir, bidsdir, tables, all_mpis:bool=False):
 
 
 
-def create_participants_tsv(mspaths_dir, bidsdir):
+def create_participants_tsv(mspaths_dir, bidsdir, group:str|None = None):
     """
         - age(at baseline),
         - sex 
         - handedness
         - siteID
+        - group 
         - ... 
+
+
+    Parameters
+    ------------
+    
+    mspaths_dir: str
+        Path to Data Tables directory
+    bidsdir: str
+        Path to output-bids dir (root)
+    group: str
+        should be "patients" or "controls", if None it will be detetected by StudyID (001 => patients, 005 => controls)
     """
     
     with open("column_names.json", "r") as file:
@@ -172,6 +184,9 @@ def create_participants_tsv(mspaths_dir, bidsdir):
 
     # Sex can be fetched from EMR and MSPT Sociodemoigraphics => both are incomplete so we combine them to get the maximum amount
     df = pd.merge(prepared_tables["EMR Sociodemographics"], prepared_tables["MSPT Sociodemographics"], on=['mpi', 'site', 'sex'], how='outer')
+
+    all_mpis = df.mpi.unique().to_list()
+
     df.sex = df.sex.str.lower() # the tables are inconsistent in the use of caps
     df.sex.replace('undifferentiated', pd.NaT) #  some people have different entries in sex => remove the undifferentiated to get entries for those patients who
                                                    # have only                                                
@@ -194,13 +209,23 @@ def create_participants_tsv(mspaths_dir, bidsdir):
     df_socio["birthyear"] = df_socio.birthyear.round(0)
 
     results_df = results_df.merge(pd.DataFrame(df_socio.groupby('mpi').agg({'birthyear': lambda x: round(x.median())})), on='mpi', how='left')
+    # Narrow down the data set to known MPIs
+    results_df = pd.DataFrame(results_df[results_df.mpi in all_mpis])
+    # Now add the Group - patients/controls => based on automatic guess or given as parameter
+    if group is None:
+        if "888MS001" in mspaths_dir:
+            group = "patients"
+        elif "888MS005" in mspaths_dir:
+            group = "controls"
 
-    
+    results_df[results_df.mpi in all_mpis]["group"] = group
 
     return results_df
 
 
-def main(mspaths_dir, bidsdir):
+
+
+def main(mspaths_dir, bidsdir, overwrite_participants_tsv:bool=False):
 
     with open("column_names.json", "r") as file:
         table_data = json.load(file)
@@ -209,9 +234,16 @@ def main(mspaths_dir, bidsdir):
     prepare_tables(mspaths_dir, bidsdir, table_data)
     participants_df = create_participants_tsv(mspaths_dir, bidsdir)
 
-    participants_df.to_csv(join(bidsdir, 'participants.tsv'), sep='\t', index=False)
-
-
+    file_path = join(bidsdir, 'participants.tsv')
+    if overwrite_participants_tsv:
+        participants_df.to_csv(file_path, header=True, sep='\t', index=False)
+    else
+        if os.path.exists(file_path):
+            # Append the DataFrame to the existing file
+            participants_df.to_csv(file_path, mode='a', header=False, sep='\t', index=False)
+        else:
+            # Save the DataFrame as a new TSV file
+            participants_df.to_csv(file_path, mode='w', header=True, sep='\t', index=False)
 
 
 if __name__ == '__main__':
@@ -219,7 +251,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('mspaths_dir', type=str, help='path of mspaths-datatables')
     parser.add_argument('bidsdir', type=str, help='resulting bidsdir')
-
+    parser.add_argument('--group', '-g', type=str, default=None, help='Set the group of the Patient')
     args = parser.parse_args()
 
     main(args.mspaths_dir, args.bidsdir)
