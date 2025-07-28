@@ -162,7 +162,11 @@ def cleanup_sessions(bidsroot):
             sessions = [basename(s).replace('ses-','') for s in glob(join(subject, 'ses-*'))]
             sessions.sort(reverse=False)
 
-            sessions_df = pd.DataFrame()
+            
+            sessions_tsv = join(subject, f'sub-{subject_id}_sessions.tsv')
+            sessions_df = pd.DataFrame({'session_id':[], 'acq_time': []})
+            if os.path.exists(sessions_tsv):
+                sessions_df = pd.read_csv(sessions_tsv, header=0, sep='\t')
 
             for s in range(len(sessions)):
 
@@ -171,21 +175,31 @@ def cleanup_sessions(bidsroot):
                 except ValueError:
                     log.warning(f'session ses-{sessions[s]} is not a valid date - assuming it was already converted')
                     continue
-                sessions_df = pd.concat((sessions_df, pd.DataFrame({'session_id': [f'ses-{s+1:03}'], 'acq_time': [ses_date]})), ignore_index=True)
+
+                ses_id = f'ses-{s+1:03}'
+                if ses_id in sessions_df.session_id.to_list():
+                    # There's already a session with this ID:
+                    if ses_date in sessions_df.query('session_id == @ses_id').acq_time.to_list():
+                        # This session is already in the list => ignore
+                        continue
+                    else
+                        # Theres already a session of the same name - but different date - find a new name
+                        ses_nr = s
+                        while ses_id in sessions_df.session_id.to_list():
+                            ses_nr = ses_nr + 1
+                            ses_id = f'ses-{ses_nr+1:03}'
+
+                sessions_df = pd.concat((sessions_df, pd.DataFrame({'session_id': [ses_id], 'acq_time': [ses_date]})), ignore_index=True)
                 log.debug(f'renaming ses-{sessions[s]} to ses-{s+1:03}')
 
                 rename(join(subject, f'ses-{sessions[s]}'), join(subject, f'ses-{s+1:03}'))
 
-                files = glob(join(subject, f'ses-{s+1:03}', '*', f'sub*ses-{sessions[s]}*'))
+                files = glob(join(subject, ses_id, '*', f'sub*ses-{sessions[s]}*'))
                 for f in files:
-                    rename(f, f.replace(f'ses-{sessions[s]}', f'ses-{s+1:03}'))
-
+                    rename(f, f.replace(f'ses-{sessions[s]}', ses_id))
             # Write the sessions_tsv
             sessions_tsv = join(subject, f'sub-{subject_id}_sessions.tsv')
-            if os.path.exists(sessions_tsv:
-                sessions_df.to_csv(sessions_tsv, sep='\t', index=False, mode='a')
-            else:
-                sessions_df.to_csv(sessions_tsv, sep='\t', index=False)
+            sessions_df.to_csv(sessions_tsv, sep='\t', index=False)
 
             progress.update(renaming_task, advance=1)
 
