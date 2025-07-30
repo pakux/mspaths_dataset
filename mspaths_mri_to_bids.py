@@ -1,9 +1,11 @@
 #! /usr/bin/env python3
 
+import shutil
 import zipfile
 import logging
-import shutil
+import datetime
 import subprocess
+import pandas as pd
 from glob import glob
 from rich import print
 from os import makedirs, rename
@@ -163,9 +165,9 @@ def cleanup_sessions(bidsroot):
             sessions.sort(reverse=False)
 
             
-            sessions_tsv = join(subject, f'sub-{subject_id}_sessions.tsv')
+            sessions_tsv = join(subject, f'{subject}_sessions.tsv')
             sessions_df = pd.DataFrame({'session_id':[], 'acq_time': []})
-            if os.path.exists(sessions_tsv):
+            if exists(sessions_tsv):
                 sessions_df = pd.read_csv(sessions_tsv, header=0, sep='\t')
 
             for s in range(len(sessions)):
@@ -181,13 +183,16 @@ def cleanup_sessions(bidsroot):
                     # There's already a session with this ID:
                     if ses_date in sessions_df.query('session_id == @ses_id').acq_time.to_list():
                         # This session is already in the list => ignore
+                        log.debug(f'{subject}: session {ses_id} with date {ses_date} is already in sessions.tsv')
                         continue
-                    else
+                    else:
                         # Theres already a session of the same name - but different date - find a new name
+                        log.debug(f'{subject}: session {ses_id} is already in sessions.tsv - searching new session-id')
                         ses_nr = s
                         while ses_id in sessions_df.session_id.to_list():
                             ses_nr = ses_nr + 1
                             ses_id = f'ses-{ses_nr+1:03}'
+                        log.debug(f'{subject}: new session_id found: {ses_id}')
 
                 sessions_df = pd.concat((sessions_df, pd.DataFrame({'session_id': [ses_id], 'acq_time': [ses_date]})), ignore_index=True)
                 log.debug(f'renaming ses-{sessions[s]} to ses-{s+1:03}')
@@ -198,7 +203,7 @@ def cleanup_sessions(bidsroot):
                 for f in files:
                     rename(f, f.replace(f'ses-{sessions[s]}', ses_id))
             # Write the sessions_tsv
-            sessions_tsv = join(subject, f'sub-{subject_id}_sessions.tsv')
+            sessions_tsv = join(subject, f'{subject}_sessions.tsv')
             sessions_df.to_csv(sessions_tsv, sep='\t', index=False)
 
             progress.update(renaming_task, advance=1)
@@ -208,28 +213,30 @@ def main():
 
     parser = argparse.ArgumentParser(description='convert MSPATHS Data to BIDS')
     subparsers = parser.add_subparsers(dest = 'command')
-
-    parser.add_argument('source')
-    parser.add_argument('target', default='.', help='target BIDS-Root')
+    
     parser.add_argument('--debug', '-d', default='ERROR', help='debug-level')
-    parser.add_argument('--zipfile', '-z', action='store_true', default=False, help='source is a single bundle zipfile')
 
     
     # Subcommand for cleanup_sessions
     cleanup_parser = subparsers.add_parser('cleanup', help='Clean up sessions')
-    cleanup_parser.add_argument('target', help='Target BIDS-Root for cleanup')
+    cleanup_parser.add_argument('cleanup_target', help='Target BIDS-Root for cleanup')
 
+    copy_parser = subparsers.add_parser('copy', help='Copy Files')
+    copy_parser.add_argument('source')
+    copy_parser.add_argument('target', default='.', help='target BIDS-Root')
+    copy_parser.add_argument('--zipfile', '-z', action='store_true', default=False, help='source is a single bundle zipfile')
 
     args = parser.parse_args()
 
     log.setLevel(args.debug)
 
     if args.command == 'cleanup':
-        cleanup_sessions(args.target)
-    elif args.zipfile:
-        extract_single_zipbundle(args.source, args.target)
-    else:
-        extract_mri_files(args.source, args.target)
+        cleanup_sessions(args.cleanup_target)
+    elif args.command == 'copy':
+        if args.zipfile:
+            extract_single_zipbundle(args.source, args.target)
+        else:
+            extract_mri_files(args.source, args.target)
 
 
 
