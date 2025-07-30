@@ -147,7 +147,7 @@ def extract_single_zipbundle(source, bidsroot):
 
 
 
-def cleanup_sessions(bidsroot):
+def cleanup_sessions(bidsroot, dryrun:bool=False):
 
     log.info(f'Finding all subjects in bidsdir {bidsroot}')
     subjects = glob(join(abspath(bidsroot), 'sub-*'))
@@ -165,7 +165,7 @@ def cleanup_sessions(bidsroot):
             sessions.sort(reverse=False)
 
             
-            sessions_tsv = join(subject, f'{subject}_sessions.tsv')
+            sessions_tsv = join(subject, f'{basename(subject)}_sessions.tsv')
             sessions_df = pd.DataFrame({'session_id':[], 'acq_time': []})
             if exists(sessions_tsv):
                 sessions_df = pd.read_csv(sessions_tsv, header=0, sep='\t')
@@ -197,14 +197,29 @@ def cleanup_sessions(bidsroot):
                 sessions_df = pd.concat((sessions_df, pd.DataFrame({'session_id': [ses_id], 'acq_time': [ses_date]})), ignore_index=True)
                 log.debug(f'renaming ses-{sessions[s]} to ses-{s+1:03}')
 
-                rename(join(subject, f'ses-{sessions[s]}'), join(subject, f'ses-{s+1:03}'))
+                if dryrun:
+                    log.info(f'dryrun - renaming session: {sessions[s]} to {s+1:03}')
+                else:
+                    log.info(f'renaming session: {sessions[s]} to {s+1:03}')
+                    rename(join(subject, f'ses-{sessions[s]}'), join(subject, f'ses-{s+1:03}'))
 
                 files = glob(join(subject, ses_id, '*', f'sub*ses-{sessions[s]}*'))
                 for f in files:
-                    rename(f, f.replace(f'ses-{sessions[s]}', ses_id))
+                    new_f = f.replace(f"ses-{sessions[s]}", ses_id)
+                    if dryrun:
+                        log.info(f'dryrun - renaming {f} to {new_f}')
+                    else:
+                        log.info(f'renaming {f} to {new_f}')
+                        rename(f, new_f)
             # Write the sessions_tsv
-            sessions_tsv = join(subject, f'{subject}_sessions.tsv')
-            sessions_df.to_csv(sessions_tsv, sep='\t', index=False)
+
+            sessions_tsv = join(subject, f'{basename(subject)}_sessions.tsv')
+            
+            if dryrun:
+                log.info(f'dryrun - saving {sessions_tsv}')
+            else:
+                log.info(f'saving {sessions_tsv}')
+                sessions_df.to_csv(join(subject, sessions_tsv), sep='\t', index=False)
 
             progress.update(renaming_task, advance=1)
 
@@ -220,6 +235,7 @@ def main():
     # Subcommand for cleanup_sessions
     cleanup_parser = subparsers.add_parser('cleanup', help='Clean up sessions')
     cleanup_parser.add_argument('cleanup_target', help='Target BIDS-Root for cleanup')
+    cleanup_parser.add_argument('--dryrun', '-n', action='store_true', default=False, help='dont actually change anything - just test what would happen')
 
     copy_parser = subparsers.add_parser('copy', help='Copy Files')
     copy_parser.add_argument('source')
