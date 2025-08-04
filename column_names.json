@@ -27,6 +27,7 @@
     ],
     "EMR Comorbidities": [],
     "EMR Immunization": [],
+    "Social History": ["effective_date", "nm_strt"],
     "EMR Medications": [
         ["med_strt", "effective_date_from_time"],
         ["med_end", "effective_date_to_time"],
@@ -35,5 +36,4 @@
         ["med_dose", "dose_quantity"],
         ["med_unit", "dose_quantity_units"]
     ]
-
 }

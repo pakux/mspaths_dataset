@@ -5,7 +5,7 @@ from glob import glob
 from rich import print
 from rich.progress import track
 from rich.logging import RichHandler
-from os.path import join, abspath,basename
+from os.path import join, abspath,basename, exists
 
 __author__ = "Paul Kuntke"
 __license__ = "BSD(3-Clause)"
@@ -58,28 +58,34 @@ def read_mspaths_csvs(basedir:str, table:str,  subjects:list[str]|None = None):
             
     """
     filelist = glob(join(abspath(basedir), table, '*_v0*.csv'))
+    log.debug(f"Reading tables from {basedir}")
     
     # if corrected is in filelist -> remove non-corrected
     remove_files = [f.replace('_CORRECTED', '') for f in filelist if 'CORRECTED' in f.upper()]
     log.debug(f"ignoring files: {remove_files}")
     filelist = [f for f in filelist if f not in remove_files]
 
+    log.debug(f"Reding follwoing tables: {filelist}")
 
-    df = pd.DataFrame()
-    for f in filelist:
-        log.debug(f"reading {f} ")
-        f_df = pd.read_csv(f, encoding="cp1252") # Some tables contain Chars that are not readable with default utf-8 codepage
-        f_df['file'] = basename(f)
-        df = pd.concat((df, f_df), ignore_index = True)
-        
-    # now change Filetype of MPI to str
-    df.mpi = df.mpi.astype(str)
+    df = pd.DataFrame({"mpi":[]})
+    if len(filelist) > 0:
+        for f in filelist:
+            log.debug(f"reading {f} ")
+            f_df = pd.read_csv(f, encoding="cp1252") # Some tables contain Chars that are not readable with default utf-8 codepage
+            f_df['file'] = basename(f)
+            df = pd.concat((df, f_df), ignore_index = True)
+            
+        # now change Filetype of MPI to str
+        df.mpi = df.mpi.astype(str)
 
-    if subjects is None:
-        log.info("No subject selected - use all subjects")
-    else:
-        log.debug("filtering mpis")
-        df = df.query("mpi in @subjects")
+        if subjects is None:
+            log.info("No subject selected - use all subjects")
+        else:
+            log.debug("filtering mpis")
+            df = df.query("mpi in @subjects")
+    else: 
+        log.debug(f"Empty filelist - skipping")
+
 
     return df
 
@@ -106,8 +112,11 @@ def column_pairs(df:pd.DataFrame, column_pairs:list):
     for pair in column_pairs:
         for col in pair[1:]:
             # Fill in empty cells with values from other cols from the pairs
-            df[pair[0]] = df[pair[0]].fillna(df[col])
-            df.drop(columns=col, inplace=True)
+            try: 
+                df[pair[0]] = df[pair[0]].fillna(df[col])
+                df.drop(columns=col, inplace=True)
+            except KeyError:
+                continue
 
     return df
 
@@ -183,9 +192,19 @@ def create_participants_tsv(mspaths_dir, bidsdir, group:str|None = None):
     prepared_tables = prepare_tables(mspaths_dir, bidsdir, table_data)
 
     # Sex can be fetched from EMR and MSPT Sociodemoigraphics => both are incomplete so we combine them to get the maximum amount
-    df = pd.merge(prepared_tables["EMR Sociodemographics"], prepared_tables["MSPT Sociodemographics"], on=['mpi', 'site', 'sex'], how='outer')
+    try:
+        df = pd.merge(prepared_tables["EMR Sociodemographics"], prepared_tables["MSPT Sociodemographics"], on=['mpi', 'site', 'sex'], how='outer')
+    except KeyError:
+        df = prepared_tables["MSPT Sociodemographics"]
 
-    all_mpis = df.mpi.unique().to_list()
+
+    all_mpis = df.drop_duplicates(subset=["mpi"]).mpi.to_list()
+
+    medhist_df = prepared_tables["Social History"]
+    if len(medhist_df) > 0:
+        df = pd.merge(df, medhist_df, on=['mpi', 'site'], how='left')
+
+
 
     df.sex = df.sex.str.lower() # the tables are inconsistent in the use of caps
     df.sex.replace('undifferentiated', pd.NaT) #  some people have different entries in sex => remove the undifferentiated to get entries for those patients who
@@ -202,15 +221,28 @@ def create_participants_tsv(mspaths_dir, bidsdir, group:str|None = None):
     results_df = pd.merge(sex_df, site_df, on='mpi', how='outer')
     results_df = results_df.merge(pd.DataFrame({'mpi': mpis}), on='mpi', how='right')
 
-    # Read Birthyear and assume
-    df_socio = prepared_tables["EMR Sociodemographics"]
-    df_socio["date"] = pd.to_datetime(df_socio.effective_date, unit='s')
-    df_socio["birthyear"] = df_socio.date.dt.year - df_socio.age
-    df_socio["birthyear"] = df_socio.birthyear.round(0)
 
-    results_df = results_df.merge(pd.DataFrame(df_socio.groupby('mpi').agg({'birthyear': lambda x: round(x.median())})), on='mpi', how='left')
+    
+
+
+    # Read Birthyear and assume
+    # df = prepared_tables["EMR Sociodemographics"]
+    # df["date"] = pd.to_datetime(df.effective_date, unit='s')
+
+    if "effective_date" in df.columns:
+        df["date"] = pd.to_datetime(df.effective_date, unit='s')
+    elif "nm_strt" in df.columns:
+        df["date"] = pd.to_datetime(df.nm_strt, unit='s')
+    else:
+        from ipdb import set_trace
+        set_trace()    
+    df["birthyear"] = df.date.dt.year - df.age
+    df["birthyear"] = df.birthyear.round(0)
+
+    results_df = results_df.merge(pd.DataFrame(df.groupby('mpi').agg({'birthyear': lambda x: round(x.median())})), on='mpi', how='left')
     # Narrow down the data set to known MPIs
-    results_df = pd.DataFrame(results_df[results_df.mpi in all_mpis])
+
+    results_df = pd.DataFrame(results_df.query("mpi in @all_mpis"))
     # Now add the Group - patients/controls => based on automatic guess or given as parameter
     if group is None:
         if "888MS001" in mspaths_dir:
@@ -218,7 +250,8 @@ def create_participants_tsv(mspaths_dir, bidsdir, group:str|None = None):
         elif "888MS005" in mspaths_dir:
             group = "controls"
 
-    results_df[results_df.mpi in all_mpis]["group"] = group
+    # results_df.query("mpi in @all_mpis")["group"] = group
+    results_df["group"] = group
 
     return results_df
 
@@ -228,6 +261,7 @@ def create_participants_tsv(mspaths_dir, bidsdir, group:str|None = None):
 def main(mspaths_dir, bidsdir, overwrite_participants_tsv:bool=False):
 
     with open("column_names.json", "r") as file:
+
         table_data = json.load(file)
 
     
@@ -237,8 +271,8 @@ def main(mspaths_dir, bidsdir, overwrite_participants_tsv:bool=False):
     file_path = join(bidsdir, 'participants.tsv')
     if overwrite_participants_tsv:
         participants_df.to_csv(file_path, header=True, sep='\t', index=False)
-    else
-        if os.path.exists(file_path):
+    else:
+        if exists(file_path):
             # Append the DataFrame to the existing file
             participants_df.to_csv(file_path, mode='a', header=False, sep='\t', index=False)
         else:
