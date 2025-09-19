@@ -161,13 +161,15 @@ def cleanup_sessions(bidsroot, dryrun:bool=False):
         renaming_task = progress.add_task("[yellow]Renaming sessions ", total=len(subjects))
 
         for subject in subjects:
+            subject_id = basename(subject)
             sessions = [basename(s).replace('ses-','') for s in glob(join(subject, 'ses-*'))]
             sessions.sort(reverse=False)
 
             
-            sessions_tsv = join(subject, f'{basename(subject)}_sessions.tsv')
+            sessions_tsv = join(subject, f'{subject_id}_sessions.tsv')
             sessions_df = pd.DataFrame({'session_id':[], 'acq_time': []})
             if exists(sessions_tsv):
+                log.info(f'session_tsv for {subject_id} already found, checking if I need to append')
                 sessions_df = pd.read_csv(sessions_tsv, header=0, sep='\t')
 
             for s in range(len(sessions)):
@@ -213,7 +215,7 @@ def cleanup_sessions(bidsroot, dryrun:bool=False):
                         rename(f, new_f)
             # Write the sessions_tsv
 
-            sessions_tsv = join(subject, f'{basename(subject)}_sessions.tsv')
+            sessions_tsv = join(subject, f'{subject_id}_sessions.tsv')
             
             if dryrun:
                 log.info(f'dryrun - saving {sessions_tsv}')

@@ -64,12 +64,6 @@ def main(bidspath:str, mspaths_dir:str):
     df.to_csv(join(bidspath, 'participants_hc.tsv'), sep='\t', index=False)
     
 
-
-
-
-
-
-
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('bidspath', type=str, help='Path to a specific file or directory to process.')

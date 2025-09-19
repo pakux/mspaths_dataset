@@ -285,8 +285,6 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('mspaths_dir', type=str, help='path of mspaths-datatables')
     parser.add_argument('bidsdir', type=str, help='resulting bidsdir')
-    parser.add_argument('--group', '-g', type=str, default=None, help='Set the group of the Patient')
-    args = parser.parse_args()
 
     main(args.mspaths_dir, args.bidsdir)
 
