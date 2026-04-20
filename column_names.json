@@ -35,5 +35,18 @@
         ["med_name", "medication_name"],
         ["med_dose", "dose_quantity"],
         ["med_unit", "dose_quantity_units"]
+    ],
+    "EMR Vitals": [
+        ["effective_date", "vit_date"],
+        ["systolic_pressure", "sys_val"],
+        ["systolic_pressure_units", "sys_unit"],
+        ["diastolic_pressure", "dia_val"],
+        ["diastolic_pressure_units", "dia_unit"],
+        ["BMI", "bmi"],
+        ["BMI_units", "bmi_unit"],
+        ["height", "hgt"],
+        ["height_units", "hgt_unit"],
+        ["weight", "wgt"],
+        ["weight_units", "wgt_unit"]
     ]
 }
